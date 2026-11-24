@@ -1,0 +1,18 @@
+{
+  "name": "jiit-62-3d-map",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Unofficial interactive 3D campus map of JIIT Noida Sector 62 for first-year students",
+  "type": "module",
+  "scripts": {
+    "data": "node scripts/fetch-osm.mjs && node scripts/build-data.mjs",
+    "build-data": "node scripts/build-data.mjs",
+    "dev": "node build.mjs --serve",
+    "build": "node build.mjs"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "esbuild": "0.24.0",
+    "three": "0.170.0"
+  }
+}

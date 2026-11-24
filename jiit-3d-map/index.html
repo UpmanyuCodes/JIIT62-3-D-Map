@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover" />
+<title>JIIT Sector 62 · 3D Campus Map for Freshers</title>
+<meta name="description" content="Unofficial interactive 3D map of JIIT Noida Sector 62 for first-year students. Explore buildings, find routes, take a guided tour." />
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='14' fill='%23ff9f43'/><path d='M14 46V26l18-10 18 10v20H38V34H26v12z' fill='white'/></svg>" />
+<style>
+  :root {
+    --bg: rgba(17, 20, 28, 0.82);
+    --bg2: rgba(30, 34, 46, 0.9);
+    --line: rgba(255, 255, 255, 0.09);
+    --text: #eceff4;
+    --muted: #98a1b3;
+    --accent: #f59e0b;
+    --accent2: #38bdf8;
+    --radius: 12px;
+    --shadow: 0 8px 28px rgba(0, 0, 0, 0.32);
+    font-family: "Inter", "Segoe UI", system-ui, -apple-system, Roboto, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #0b0e17; color: var(--text); -webkit-font-smoothing: antialiased; }
+  #app { position: fixed; inset: 0; }
+  canvas#gl { display: block; width: 100%; height: 100%; touch-action: none; outline: none; }
+  #labels { position: absolute; inset: 0; pointer-events: none; overflow: hidden; z-index: 1; isolation: isolate; }
+  button { font: inherit; color: inherit; cursor: pointer; }
+  .glass { background: var(--bg); backdrop-filter: blur(10px) saturate(130%); -webkit-backdrop-filter: blur(10px) saturate(130%); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); }
+  .icn { width: 1.15em; height: 1.15em; flex: none; display: inline-block; vertical-align: -0.2em; }
+  kbd { background: rgba(255,255,255,.1); border-radius: 4px; padding: 1px 6px; font-family: inherit; font-size: 11.5px; border: 1px solid var(--line); }
+
+  /* ---------- labels ---------- */
+  .lbl { pointer-events: auto; cursor: pointer; user-select: none; transition: opacity .25s; }
+  .lbl .in { display: flex; align-items: center; gap: 6px; padding: 4px 10px 4px 4px; border-radius: 999px; background: rgba(17, 20, 28, .86); border: 1px solid rgba(255,255,255,.12); font-size: 12px; font-weight: 600; letter-spacing: .1px; white-space: nowrap; box-shadow: 0 4px 14px rgba(0,0,0,.35); transform-origin: 50% 100%; transform: scale(var(--s, 1)); transition: transform .2s, background .2s; position: relative; }
+  .lbl .in::after { content: ""; position: absolute; left: 50%; bottom: -6px; width: 2px; height: 6px; background: rgba(255,255,255,.5); transform: translateX(-50%); }
+  .lbl .ic { width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; background: var(--c, #555); color: #12141b; }
+  .lbl .ic .icn { width: 13px; height: 13px; stroke-width: 2.1; }
+  .lbl:hover .in, .lbl.sel .in, .lbl.hov .in { background: #fff; color: #12141b; transform: scale(calc(var(--s, 1) * 1.12)); }
+  .lbl.minor .in { font-size: 11px; padding: 3px 8px 3px 3px; }
+  .lbl.minor .ic { width: 18px; height: 18px; }
+  .lbl.minor .ic .icn { width: 11px; height: 11px; }
+
+  /* ---------- top-left brand + search ---------- */
+  #top { position: absolute; top: 14px; left: 14px; width: 340px; display: flex; flex-direction: column; gap: 10px; z-index: 5; }
+  #brand { display: flex; align-items: center; gap: 12px; padding: 12px 14px; }
+  #brand .logo { width: 38px; height: 38px; border-radius: 10px; background: linear-gradient(135deg, #f59e0b, #d9480f); display: grid; place-items: center; flex: none; color: #fff; }
+  #brand .logo .icn { width: 21px; height: 21px; }
+  #brand h1 { margin: 0; font-size: 15.5px; letter-spacing: .2px; }
+  #brand p { margin: 2px 0 0; font-size: 12px; color: var(--muted); }
+  #searchWrap { position: relative; }
+  #search { width: 100%; padding: 12px 14px 12px 40px; border-radius: 14px; border: 1px solid var(--line); background: var(--bg); color: var(--text); font: inherit; font-size: 14px; outline: none; backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); box-shadow: var(--shadow); }
+  #search:focus { border-color: var(--accent); }
+  #searchWrap > .icn { position: absolute; z-index: 1; left: 14px; top: 50%; transform: translateY(-50%); color: var(--muted); pointer-events: none; width: 17px; height: 17px; }
+  #results { position: absolute; top: calc(100% + 6px); left: 0; right: 0; max-height: 50vh; overflow: auto; padding: 6px; display: none; }
+  #results.open { display: block; }
+  .res { display: flex; align-items: center; gap: 10px; padding: 9px 10px; border-radius: 10px; cursor: pointer; }
+  .res:hover, .res.act { background: rgba(255,255,255,.08); }
+  .res .ic { width: 30px; height: 30px; border-radius: 8px; display: grid; place-items: center; background: color-mix(in srgb, var(--c) 22%, transparent); color: var(--c); flex: none; }
+  .res .ic .icn { width: 16px; height: 16px; }
+  .res b { font-size: 13.5px; display: block; }
+  .res small { color: var(--muted); font-size: 11.5px; }
+  #chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .chip { padding: 6px 10px; border-radius: 999px; border: 1px solid var(--line); background: var(--bg); font-size: 12px; backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); display: flex; align-items: center; gap: 5px; transition: .2s; }
+  .chip .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--c); }
+  .chip.off { opacity: .45; }
+  .chip.off .dot { background: transparent; border: 1px solid var(--c); }
+
+  /* ---------- info card ---------- */
+  #info { position: absolute; top: 14px; right: 14px; width: 360px; max-height: calc(100% - 28px); overflow: auto; padding: 0; transform: translateX(calc(100% + 30px)); transition: transform .45s cubic-bezier(.2,.9,.2,1); z-index: 6; }
+  #info.open { transform: none; }
+  #info .hero { padding: 18px 18px 14px; background: linear-gradient(160deg, color-mix(in srgb, var(--c) 26%, transparent), transparent 75%); border-radius: var(--radius) var(--radius) 0 0; position: relative; border-bottom: 1px solid var(--line); }
+  #info .big { width: 44px; height: 44px; border-radius: 11px; display: grid; place-items: center; background: color-mix(in srgb, var(--c) 22%, transparent); color: var(--c); border: 1px solid color-mix(in srgb, var(--c) 40%, transparent); }
+  #info .big .icn { width: 24px; height: 24px; }
+  #info h2 { margin: 10px 0 2px; font-size: 21px; }
+  #info .sub { color: var(--muted); font-size: 13px; }
+  #info .badge { display: inline-flex; align-items: center; gap: 6px; margin-top: 10px; font-size: 11.5px; padding: 4px 9px; border-radius: 999px; background: rgba(255,255,255,.08); color: #cfd5e1; }
+  #info .close { position: absolute; top: 12px; right: 12px; width: 32px; height: 32px; border-radius: 8px; border: 0; background: rgba(255,255,255,.08); display: grid; place-items: center; }
+  #info .close:hover { background: rgba(255,255,255,.16); }
+  #info .body { padding: 4px 18px 18px; font-size: 14px; line-height: 1.55; }
+  #info .body p { margin: 10px 0; color: #d9deea; }
+  #info .tips { margin: 12px 0; padding: 12px 14px; background: rgba(245, 158, 11, .08); border: 1px solid rgba(245, 158, 11, .22); border-radius: 10px; }
+  #info .tips h4 { margin: 0 0 6px; font-size: 11.5px; text-transform: uppercase; letter-spacing: .8px; color: var(--accent); display: flex; align-items: center; gap: 6px; }
+  #info .tips ul { margin: 0; padding-left: 18px; }
+  #info .tips li { margin: 4px 0; color: #e6e9f2; font-size: 13.5px; }
+  .hours { margin: 12px 0; display: grid; gap: 6px; }
+  .hours .row { display: flex; justify-content: space-between; font-size: 13px; padding: 7px 10px; border-radius: 9px; background: rgba(255,255,255,.05); }
+  .hours .row.now { background: rgba(29, 209, 161, .16); outline: 1px solid rgba(29, 209, 161, .4); }
+  .status { display: inline-flex; gap: 6px; align-items: center; font-weight: 600; font-size: 12.5px; }
+  .status::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: currentColor; box-shadow: 0 0 10px currentColor; }
+  .status.open { color: #34d399; } .status.closed { color: #f87171; }
+  .hours .row.now { background: rgba(52, 211, 153, .12); outline-color: rgba(52, 211, 153, .35); }
+  .actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 14px; }
+  .btn { display: flex; align-items: center; justify-content: center; gap: 7px; padding: 9px 12px; border-radius: 9px; border: 1px solid var(--line); background: rgba(255,255,255,.06); font-size: 13px; font-weight: 600; transition: background .15s, filter .15s; }
+  .btn .icn { width: 16px; height: 16px; }
+  .btn.sm { display: inline-flex; padding: 4px 10px; margin-left: 8px; font-size: 12px; vertical-align: middle; }
+  .btn.ico { padding: 8px; }
+  .btn:hover { background: rgba(255,255,255,.14); }
+  .btn.primary { background: var(--accent); color: #1c1305; border-color: transparent; }
+  .btn.primary:hover { filter: brightness(1.08); }
+  .btn.wide { grid-column: span 2; }
+  .note { font-size: 11.5px; color: var(--muted); margin-top: 10px; }
+
+  /* ---------- directions ---------- */
+  #dir { position: absolute; left: 14px; bottom: 90px; width: 340px; padding: 14px; z-index: 5; display: none; }
+  #dir.open { display: block; animation: pop .3s; }
+  #dir h3 { margin: 0 0 10px; font-size: 14px; display: flex; gap: 8px; align-items: center; }
+  #dir h3 .icn { color: var(--accent2); }
+  #dir h3 .btn { margin-left: auto; }
+  #dir .field { display: flex; align-items: center; gap: 8px; margin: 6px 0; }
+  #dir .field span { width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; font-size: 11px; font-weight: 700; flex: none; }
+  #dir select { flex: 1; padding: 9px 10px; border-radius: 10px; border: 1px solid var(--line); background: var(--bg2); color: var(--text); font: inherit; font-size: 13px; outline: none; }
+  #dir .swap { position: absolute; right: 18px; top: 58px; width: 30px; height: 30px; border-radius: 8px; border: 1px solid var(--line); background: var(--bg2); display: grid; place-items: center; color: var(--muted); }
+  #dir .swap:hover { color: var(--text); }
+  #dir .field select { margin-right: 38px; min-width: 0; text-overflow: ellipsis; }
+  .via { display: inline-flex; align-items: center; gap: 4px; margin: 2px 6px 0 0; padding: 2px 8px 2px 6px; border-radius: 999px; background: rgba(255,255,255,.07); font-size: 12px; }
+  .via .icn { width: 13px; height: 13px; color: var(--muted); }
+  #dirResult { margin-top: 10px; font-size: 13px; }
+  #dirResult .big { font-size: 22px; font-weight: 700; color: var(--accent2); font-variant-numeric: tabular-nums; }
+
+  /* ---------- toolbar ---------- */
+  #toolbar { position: absolute; left: 50%; bottom: 16px; transform: translateX(-50%); display: flex; gap: 4px; padding: 6px; z-index: 5; }
+  .tb { display: flex; flex-direction: column; align-items: center; gap: 4px; min-width: 62px; padding: 8px 10px 7px; border-radius: 9px; border: 0; background: transparent; font-size: 11px; font-weight: 500; color: var(--muted); transition: background .15s, color .15s; }
+  .tb .icn { width: 20px; height: 20px; }
+  .tb:hover { background: rgba(255,255,255,.07); color: var(--text); }
+  .tb.on { background: rgba(245,158,11,.14); color: var(--accent); }
+  .tsep { width: 1px; background: var(--line); margin: 6px 2px; }
+
+  /* ---------- minimap / compass ---------- */
+  #mapbox { position: absolute; right: 14px; bottom: 16px; padding: 8px; z-index: 5; }
+  #mini { display: block; width: 190px; height: 160px; border-radius: 10px; cursor: crosshair; }
+  #compass { position: absolute; right: 22px; bottom: 192px; width: 50px; height: 50px; border-radius: 50%; z-index: 5; display: grid; place-items: center; cursor: pointer; }
+  #compass .rose { width: 38px; height: 38px; transition: transform .05s linear; }
+
+  /* ---------- tour ---------- */
+  #tour { position: absolute; left: 50%; bottom: 96px; transform: translateX(-50%); width: min(560px, calc(100% - 28px)); padding: 16px 18px; z-index: 6; display: none; }
+  #tour.open { display: block; animation: pop .35s; }
+  #tour .step { font-size: 11.5px; letter-spacing: 1px; text-transform: uppercase; color: var(--accent); font-weight: 700; }
+  #tour h3 { margin: 4px 0 6px; font-size: 19px; display: flex; align-items: center; gap: 8px; }
+  #tour h3 .icn { color: var(--accent); width: 22px; height: 22px; }
+  #tour p { margin: 0; color: #d9deea; font-size: 14px; line-height: 1.5; }
+  #tour .nav { display: flex; gap: 8px; margin-top: 12px; align-items: center; }
+  #tour .bar { flex: 1; height: 4px; border-radius: 4px; background: rgba(255,255,255,.1); overflow: hidden; }
+  #tour .bar > i { display: block; height: 100%; background: var(--accent); width: 0; transition: width .4s; }
+
+  /* ---------- walk HUD ---------- */
+  #walkHud { position: absolute; top: 16px; left: 50%; transform: translateX(-50%); padding: 10px 16px; font-size: 13px; z-index: 6; display: none; text-align: center; }
+  #walkHud.open { display: block; }
+  #walkHud .icn { width: 16px; height: 16px; }
+  #cross { position: absolute; left: 50%; top: 50%; width: 6px; height: 6px; margin: -3px; border-radius: 50%; background: rgba(255,255,255,.85); box-shadow: 0 0 0 2px rgba(0,0,0,.25); display: none; z-index: 4; pointer-events: none; }
+  #joy { position: absolute; left: 26px; bottom: 110px; width: 120px; height: 120px; border-radius: 50%; display: none; z-index: 6; touch-action: none; background: rgba(15,18,30,.45); border: 1px solid rgba(255,255,255,.2); }
+  #joy > i { position: absolute; left: 50%; top: 50%; width: 50px; height: 50px; margin: -25px; border-radius: 50%; background: rgba(255,255,255,.35); }
+
+  /* ---------- help / loading / toast ---------- */
+  #help { position: absolute; inset: 0; display: none; place-items: center; background: rgba(5,7,12,.55); z-index: 20; }
+  #help.open { display: grid; animation: fade .3s; }
+  #help .card { width: min(560px, calc(100% - 28px)); padding: 24px; max-height: calc(100% - 28px); overflow: auto; }
+  #help h2 { margin: 0 0 4px; }
+  #help .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin: 16px 0; }
+  #help .grid div { background: rgba(255,255,255,.05); border-radius: 12px; padding: 12px; font-size: 13px; line-height: 1.7; }
+  #help .grid b { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; color: var(--accent); font-size: 11.5px; text-transform: uppercase; letter-spacing: .8px; }
+  #help .grid b .icn { width: 15px; height: 15px; }
+  #loading { position: fixed; inset: 0; z-index: 50; display: grid; place-items: center; background: radial-gradient(1200px 600px at 50% 40%, #1d2440, #090b12); transition: opacity .8s; }
+  #loading.done { opacity: 0; pointer-events: none; }
+  #loading .box { text-align: center; }
+  #loading .logo { width: 64px; height: 64px; margin: 0 auto 18px; border-radius: 16px; background: linear-gradient(135deg, #f59e0b, #d9480f); display: grid; place-items: center; color: #fff; animation: float 2.4s ease-in-out infinite; box-shadow: 0 10px 32px rgba(217,72,15,.4); }
+  #loading .logo .icn { width: 32px; height: 32px; }
+  #loading h2 { margin: 0; font-size: 22px; }
+  #loading p { color: var(--muted); margin: 8px 0 18px; font-size: 14px; }
+  #loading .prog { width: 240px; height: 4px; border-radius: 4px; background: rgba(255,255,255,.1); margin: 0 auto; overflow: hidden; }
+  #loading .prog > i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, #f59e0b, #38bdf8); transition: width .3s; }
+  #toast { position: absolute; left: 50%; top: 18px; transform: translate(-50%, -80px); padding: 10px 16px; font-size: 13px; z-index: 30; transition: transform .35s; display: flex; align-items: center; gap: 8px; }
+  #toast .icn { width: 16px; height: 16px; color: var(--accent); }
+  #toast.show { transform: translate(-50%, 0); }
+  #credits { position: absolute; left: 14px; bottom: 8px; font-size: 10.5px; color: rgba(255,255,255,.55); z-index: 4; text-shadow: 0 1px 2px rgba(0,0,0,.6); }
+  #credits a { color: inherit; }
+  @keyframes pop { from { opacity: 0; transform: translateY(10px) scale(.98); } }
+  #tour.open { animation: popc .35s; }
+  @keyframes popc { from { opacity: 0; transform: translate(-50%, 10px); } }
+  @keyframes fade { from { opacity: 0; } }
+  @keyframes float { 50% { transform: translateY(-8px); } }
+
+  /* ---------- mobile ---------- */
+  @media (max-width: 760px) {
+    #top { width: auto; right: 14px; top: 10px; left: 10px; }
+    #brand { display: none; }
+    #chips { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; padding-bottom: 2px; }
+    #chips::-webkit-scrollbar { display: none; }
+    .chip { flex: none; }
+    #info { top: auto; bottom: 0; right: 0; left: 0; width: auto; max-height: 62%; border-radius: 18px 18px 0 0; transform: translateY(105%); }
+    #info .hero { border-radius: 18px 18px 0 0; }
+    #toolbar { left: 8px; right: 8px; transform: none; bottom: 10px; overflow-x: auto; justify-content: space-between; }
+    .tb { min-width: 52px; padding: 6px; font-size: 10px; }
+    .tsep { display: none; }
+    #mapbox { top: 104px; bottom: auto; right: 10px; padding: 5px; }
+    #mini { width: 110px; height: 92px; }
+    #compass { top: 212px; bottom: auto; right: 14px; width: 42px; height: 42px; }
+    #dir { left: 10px; right: 10px; width: auto; bottom: 86px; }
+    #tour { bottom: 86px; }
+    #help .grid { grid-template-columns: 1fr; }
+    #credits { bottom: 78px; }
+  }
+</style>
+</head>
+<body>
+<div id="app">
+  <canvas id="gl" tabindex="0"></canvas>
+  <div id="labels"></div>
+  <div id="cross"></div>
+
+  <div id="top">
+    <div id="brand" class="glass">
+      <div class="logo"><i data-icon="landmark"></i></div>
+      <div>
+        <h1>JIIT Sector 62 · 3D Campus</h1>
+        <p>Freshers' guide · explore, search, find your way</p>
+      </div>
+    </div>
+    <div id="searchWrap">
+      <i data-icon="search"></i>
+      <input id="search" type="search" placeholder="Search: library, mess, ABB-1, gate…  ( / )" autocomplete="off" />
+      <div id="results" class="glass"></div>
+    </div>
+    <div id="chips"></div>
+  </div>
+
+  <aside id="info" class="glass" aria-live="polite"></aside>
+
+  <div id="dir" class="glass">
+    <h3><i data-icon="route"></i> Walking directions <button class="btn ico" id="dirClose" title="Close" style="padding:5px"><i data-icon="x"></i></button></h3>
+    <div class="field"><span style="background:#1dd1a1;color:#04261c">A</span><select id="dirFrom"></select></div>
+    <div class="field"><span style="background:#ff6b6b;color:#2b0606">B</span><select id="dirTo"></select></div>
+    <button class="swap" id="dirSwap" title="Swap start and destination"><i data-icon="swap"></i></button>
+    <div id="dirResult"></div>
+  </div>
+
+  <div id="tour" class="glass">
+    <div class="step" id="tourStep"></div>
+    <h3 id="tourTitle"></h3>
+    <p id="tourText"></p>
+    <div class="nav">
+      <button class="btn ico" id="tourPrev" title="Previous stop"><i data-icon="left"></i></button>
+      <div class="bar"><i id="tourBar"></i></div>
+      <button class="btn ico" id="tourPlay" title="Pause"><i data-icon="pause"></i></button>
+      <button class="btn primary" id="tourNext">Next <i data-icon="right"></i></button>
+      <button class="btn ico" id="tourClose" title="End tour"><i data-icon="x"></i></button>
+    </div>
+  </div>
+
+  <div id="walkHud" class="glass"></div>
+  <div id="joy"><i></i></div>
+
+  <div id="toolbar" class="glass">
+    <button class="tb" id="tbTour" title="Guided tour (T)"><i data-icon="tour"></i>Tour</button>
+    <button class="tb" id="tbDir" title="Directions (D)"><i data-icon="route"></i>Route</button>
+    <button class="tb" id="tbWalk" title="Walk mode (V)"><i data-icon="walk"></i>Walk</button>
+    <div class="tsep"></div>
+    <button class="tb" id="tbTime" title="Day / sunset / night (N)"><i data-icon="sun"></i><span id="timeLbl">Day</span></button>
+    <button class="tb on" id="tbLabels" title="Labels (L)"><i data-icon="tag"></i>Labels</button>
+    <button class="tb" id="tbTop" title="Top-down / 3D"><i data-icon="map"></i>2D/3D</button>
+    <button class="tb" id="tbReset" title="Reset view (R)"><i data-icon="locate"></i>Reset</button>
+    <button class="tb" id="tbHelp" title="Help (H)"><i data-icon="help"></i>Help</button>
+  </div>
+
+  <div id="compass" class="glass" title="Face north">
+    <svg class="rose" viewBox="0 0 40 40"><polygon points="20,4 24.5,20 20,17.5 15.5,20" fill="#f87171"/><polygon points="20,36 24.5,20 20,22.5 15.5,20" fill="#cbd5e1"/></svg>
+  </div>
+  <div id="mapbox" class="glass"><canvas id="mini"></canvas></div>
+
+  <div id="credits">Unofficial student map · Map data © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors · Heights &amp; interiors approximate</div>
+  <div id="toast" class="glass"></div>
+
+  <div id="help">
+    <div class="card glass">
+      <h2>Welcome to JIIT Sector 62</h2>
+      <div style="color:var(--muted);font-size:14px">An unofficial 3D map for first-year students. Click any building to learn what's inside, get walking routes, or take the guided tour.</div>
+      <div class="grid">
+        <div><b><i data-icon="mouse"></i> Mouse</b>Left-drag: rotate<br>Right-drag: pan<br>Scroll: zoom<br>Click: select a place</div>
+        <div><b><i data-icon="phone"></i> Touch</b>1 finger: rotate<br>2 fingers: zoom &amp; pan<br>Tap: select a place<br>Walk mode: joystick + drag</div>
+        <div><b><i data-icon="walk"></i> Walk mode</b><kbd>W A S D</kbd> / arrows: move<br><kbd>Shift</kbd>: run · mouse: look<br><kbd>V</kbd> or <kbd>Esc</kbd>×2: exit</div>
+        <div><b><i data-icon="keyboard"></i> Shortcuts</b><kbd>/</kbd> search · <kbd>T</kbd> tour<br><kbd>D</kbd> route · <kbd>N</kbd> day/night<br><kbd>L</kbd> labels · <kbd>R</kbd> reset</div>
+      </div>
+      <div class="actions">
+        <button class="btn primary" id="helpTour"><i data-icon="tour"></i> Start the fresher tour</button>
+        <button class="btn" id="helpClose">Explore on my own</button>
+      </div>
+      <div class="note">Built from OpenStreetMap data. Building heights, floors and interiors are approximate, and timings can change, so always confirm with official notices. Not affiliated with JIIT.</div>
+    </div>
+  </div>
+</div>
+
+<div id="loading">
+  <div class="box">
+    <div class="logo"><i data-icon="landmark"></i></div>
+    <h2>JIIT Sector 62 · 3D Campus</h2>
+    <p id="loadMsg">Laying the bricks…</p>
+    <div class="prog"><i id="loadBar"></i></div>
+  </div>
+</div>
+
+<script type="module" src="./src/main.js"></script>
+</body>
+</html>
